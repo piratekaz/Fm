@@ -38,6 +38,9 @@ ul{list-style:none;margin:10px 0 0;padding:0}
 .paid{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px}
 .paid input{flex:none;min-width:0;width:18px;height:18px;min-height:0;accent-color:var(--ok)}
 .person.done{background:var(--okbg);margin:0 -14px;padding:10px 14px}
+.chips{grid-column:2/4;display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px;font-size:13px;display:inline-flex;gap:4px;align-items:center}
+.chip button{background:transparent;color:var(--bad);padding:0 6px;min-height:24px;font-size:16px;line-height:1}
 .tools{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .tools button{background:var(--bg);color:var(--text);border:1px solid var(--line)}
 </style>
@@ -66,7 +69,7 @@ ul{list-style:none;margin:10px 0 0;padding:0}
   </div>
 
   <div class="card">
-    <h2>People (<span id="count">0</span>)</h2>
+    <h2>People &amp; their food (<span id="count">0</span>)</h2>
     <input id="search" placeholder="Search name…" style="width:100%">
     <div class="row" style="margin-top:8px">
       <input id="pName" placeholder="Add a new person" maxlength="60">
@@ -85,32 +88,48 @@ ul{list-style:none;margin:10px 0 0;padding:0}
   var KEY = "foodMoneyV1";
   var NAMES = ["Gokul","Aardhra","Abhijith","Adhithya V Pillai","Rakendhu","Adithya Manoj","Agna","Akshara Vishnu","Akshaya Parameshwaran","Amruthendu","Anjana Hari","Anjana","Annmariaa","Anosh","Anusha","Aswin Joshy","Arunthathi","Arsh","Athira","Bettly","Bismitha","Devananda","Dhiya Ann","Diya Sathar","Drissya","Fabitha","Farheen","Fathima Fazleen","Fathima","Fiza","Goutham","Hasna","Lona","Janvy","Lakshmi","Greeshma","Lena","Meenakshi","Meera","Nahla","Namisha","Namitha","Nasmia","Nayana","Pravitha","Adithyan NJ","Ricky","Riya","Salma","Sayendhu","Shaun","Shibila","Sivani","Sreelakshmi","Thamannaahh","Yaswanth","Raychel","Nandana Sreenivasan","Mary","Akshaya A M","Ramzi","Abisha","Adhila","Adika","Amrita","Ajmila"];
 
-  var state = load();
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-  function fresh(){ return {menu:[], people:NAMES.map(function(n){return {id:uid(), name:n, food:"", paid:false};})}; }
+  function fresh(){ return {menu:[], people:NAMES.map(function(n){return {id:uid(), name:n, foods:[], paid:false};})}; }
   function load(){
     try{
       var raw = localStorage.getItem(KEY);
-      if(raw){ var s = JSON.parse(raw); if(s && Array.isArray(s.menu) && Array.isArray(s.people)) return s; }
+      if(raw){
+        var s = JSON.parse(raw);
+        if(s && Array.isArray(s.menu) && Array.isArray(s.people)){
+          // migrate old single-food data to a foods list
+          s.people.forEach(function(p){
+            if(!Array.isArray(p.foods)){ p.foods = p.food ? [p.food] : []; }
+            delete p.food;
+          });
+          return s;
+        }
+      }
     }catch(e){}
     return fresh();
   }
+  var state = load();
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
   function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
   function money(n){ return "₹" + (Math.round(n*100)/100).toLocaleString("en-IN"); }
+  function $(id){ return document.getElementById(id); }
+
   function foodById(id){
     for(var i=0;i<state.menu.length;i++) if(state.menu[i].id===id) return state.menu[i];
     return null;
   }
-  function eaters(id){ return state.people.filter(function(p){return p.food===id;}).length; }
-  // Per-person amount: full price, or total divided by the number of people sharing a split item
+  // number of people sharing a food (a person counts once, even with duplicates)
+  function eaters(id){ return state.people.filter(function(p){return p.foods.indexOf(id)!==-1;}).length; }
+  // Cost of ONE entry of a food: full price, or total / number of people sharing a split item
   function priceOf(foodId){
     var f = foodById(foodId); if(!f) return 0;
     if(!f.split) return f.price;
     var n = eaters(foodId);
     return n ? f.price / n : 0;
   }
-  function $(id){ return document.getElementById(id); }
+  function personTotal(p){
+    return p.foods.reduce(function(sum,id){ return sum + priceOf(id); }, 0);
+  }
+  function findPerson(id){ return state.people.filter(function(p){return p.id===id;})[0]; }
 
   function renderMenu(){
     var ul = $("menu");
@@ -125,18 +144,23 @@ ul{list-style:none;margin:10px 0 0;padding:0}
 
   function renderPeople(){
     var q = $("search").value.trim().toLowerCase();
-    var opts = '<option value="">— Select food —</option>' + state.menu.map(function(f){
+    var opts = '<option value="">+ Add food…</option>' + state.menu.map(function(f){
       return '<option value="'+f.id+'">'+esc(f.name)+(f.split?' (split of '+money(f.price)+')':' ('+money(f.price)+')')+'</option>';
     }).join("");
     var html = "";
     state.people.forEach(function(p,i){
       if(q && p.name.toLowerCase().indexOf(q)===-1) return;
-      var amt = p.food ? priceOf(p.food) : 0;
-      html += '<div class="person'+(p.paid?' done':'')+'" data-id="'+p.id+'">'
+      var has = p.foods.length > 0;
+      var chips = p.foods.map(function(id,idx){
+        var f = foodById(id); if(!f) return "";
+        return '<span class="chip">'+esc(f.name)+' · '+money(priceOf(id))+'<button title="Remove" data-rm="'+p.id+':'+idx+'">×</button></span>';
+      }).join("");
+      html += '<div class="person'+(p.paid?' done':'')+'">'
         + '<span class="n">'+(i+1)+'</span><span class="name">'+esc(p.name)+'</span>'
-        + '<span class="amt">'+(p.food?money(amt):"—")+'</span>'
-        + '<div class="sel"><select data-food="'+p.id+'">'+opts.replace('value="'+p.food+'"','value="'+p.food+'" selected')+'</select>'
-        + '<label class="paid"><input type="checkbox" data-paid="'+p.id+'"'+(p.paid?' checked':'')+(p.food?'':' disabled')+'> Paid</label></div>'
+        + '<span class="amt">'+(has?money(personTotal(p)):"—")+'</span>'
+        + (has ? '<div class="chips">'+chips+'</div>' : '')
+        + '<div class="sel"><select data-food="'+p.id+'">'+opts+'</select>'
+        + '<label class="paid"><input type="checkbox" data-paid="'+p.id+'"'+(p.paid?' checked':'')+(has?'':' disabled')+'> Paid</label></div>'
         + '</div>';
     });
     $("people").innerHTML = html || '<div class="empty">No matching names.</div>';
@@ -146,66 +170,81 @@ ul{list-style:none;margin:10px 0 0;padding:0}
   function renderStats(){
     var total=0, paid=0;
     state.people.forEach(function(p){
-      if(!p.food) return;
-      var a = priceOf(p.food); total += a; if(p.paid) paid += a;
+      var a = personTotal(p); total += a; if(p.paid) paid += a;
     });
     $("sTotal").textContent = money(total);
     $("sPaid").textContent = money(paid);
     $("sDue").textContent = money(total-paid);
   }
-
   function renderAll(){ renderMenu(); renderPeople(); renderStats(); }
-  function findPerson(id){ return state.people.filter(function(p){return p.id===id;})[0]; }
+  function refresh(){ save(); renderAll(); }
 
   $("addFood").addEventListener("click", function(){
     var name = $("fName").value.trim(), price = parseFloat($("fPrice").value);
     if(!name || !isFinite(price) || price < 0){ alert("Enter a food name and a valid price."); return; }
     state.menu.push({id:uid(), name:name, price:price, split:$("fSplit").checked});
     $("fName").value = ""; $("fPrice").value = ""; $("fSplit").checked = false; $("fPrice").placeholder = "Price ₹";
-    save(); renderAll();
+    refresh();
   });
   $("fSplit").addEventListener("change", function(){ $("fPrice").placeholder = this.checked ? "Total bill ₹" : "Price ₹"; });
   $("fPrice").addEventListener("keydown", function(e){ if(e.key==="Enter") $("addFood").click(); });
 
   $("menu").addEventListener("click", function(e){
     var id = e.target.getAttribute("data-del"); if(!id) return;
-    if(!confirm("Delete this food? People who chose it will be unset.")) return;
+    if(!confirm("Delete this food? It will be removed from everyone who chose it.")) return;
     state.menu = state.menu.filter(function(f){return f.id!==id;});
-    state.people.forEach(function(p){ if(p.food===id){ p.food=""; p.paid=false; } });
-    save(); renderAll();
+    state.people.forEach(function(p){
+      p.foods = p.foods.filter(function(x){return x!==id;});
+      if(!p.foods.length) p.paid = false;
+    });
+    refresh();
   });
 
   $("people").addEventListener("change", function(e){
-    var t = e.target, p;
-    if(t.getAttribute("data-food")!==null){
-      p = findPerson(t.getAttribute("data-food")); if(!p) return;
-      p.food = t.value; if(!p.food) p.paid = false;
-    } else if(t.getAttribute("data-paid")!==null){
-      p = findPerson(t.getAttribute("data-paid")); if(!p) return;
-      p.paid = t.checked;
-    } else return;
-    save(); renderMenu(); renderPeople(); renderStats();
+    var t = e.target, p, id;
+    if((id = t.getAttribute("data-food")) !== null){
+      p = findPerson(id); if(!p || !t.value) return;
+      var f = foodById(t.value); if(!f) return;
+      // a split item can only be shared once per person; normal items may repeat (e.g. 2 plates)
+      if(!(f.split && p.foods.indexOf(f.id)!==-1)){ p.foods.push(f.id); p.paid = false; }
+      refresh();
+    } else if((id = t.getAttribute("data-paid")) !== null){
+      p = findPerson(id); if(!p) return;
+      p.paid = t.checked && p.foods.length > 0;
+      refresh();
+    }
+  });
+
+  $("people").addEventListener("click", function(e){
+    var v = e.target.getAttribute("data-rm"); if(!v) return;
+    var parts = v.split(":"), p = findPerson(parts[0]), idx = parseInt(parts[1],10);
+    if(!p || !(idx >= 0 && idx < p.foods.length)) return;
+    p.foods.splice(idx,1); p.paid = false;
+    refresh();
   });
 
   $("search").addEventListener("input", renderPeople);
 
   $("addPerson").addEventListener("click", function(){
     var n = $("pName").value.trim(); if(!n) return;
-    state.people.push({id:uid(), name:n, food:"", paid:false});
-    $("pName").value = ""; save(); renderAll();
+    state.people.push({id:uid(), name:n, foods:[], paid:false});
+    $("pName").value = ""; refresh();
   });
   $("pName").addEventListener("keydown", function(e){ if(e.key==="Enter") $("addPerson").click(); });
 
   $("reset").addEventListener("click", function(){
     if(!confirm("Clear every food selection and paid mark?")) return;
-    state.people.forEach(function(p){ p.food=""; p.paid=false; });
-    save(); renderAll();
+    state.people.forEach(function(p){ p.foods=[]; p.paid=false; });
+    refresh();
   });
 
   $("copy").addEventListener("click", function(){
     var lines = [];
     state.people.forEach(function(p){
-      if(p.food && !p.paid) lines.push(p.name+" - "+money(priceOf(p.food)));
+      if(p.foods.length && !p.paid){
+        var names = p.foods.map(function(id){ var f=foodById(id); return f?f.name:""; }).filter(Boolean).join(", ");
+        lines.push(p.name+" ("+names+") - "+money(personTotal(p)));
+      }
     });
     var text = lines.length ? "Pending food money:\n"+lines.join("\n") : "Nothing pending.";
     function done(){ alert("Copied!"); }
