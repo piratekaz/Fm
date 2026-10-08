@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Food Money Collection</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f7f9;--card:#fff;--text:#1c2330;--muted:#6b7385;--line:#e3e6ec;--accent:#e8590c;--ok:#2b8a3e;--okbg:#e6f4ea;--bad:#c92a2a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151b;--card:#1b1f27;--text:#e8eaf0;--muted:#98a0b3;--line:#2b303b;--accent:#ff8a4c;--ok:#69db7c;--okbg:#1d3326;--bad:#ff8787}}
+:root[data-theme="dark"]{--bg:#12151b;--card:#1b1f27;--text:#e8eaf0;--muted:#98a0b3;--line:#2b303b;--accent:#ff8a4c;--ok:#69db7c;--okbg:#1d3326;--bad:#ff8787}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 14px}
+h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
+.stat b{display:block;font-size:18px}.stat span{font-size:12px;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,select,button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:40px}
+input{flex:1;min-width:110px}
+button{cursor:pointer;background:var(--accent);color:#fff;border:0;font-weight:600}
+button.ghost{background:transparent;color:var(--bad);border:1px solid var(--line);padding:4px 10px;min-height:32px}
+ul{list-style:none;margin:10px 0 0;padding:0}
+.menu li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.empty{color:var(--muted);font-size:13px;margin-top:8px}
+.person{display:grid;grid-template-columns:28px 1fr auto;gap:6px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.person .n{color:var(--muted);font-size:13px}
+.person .name{font-weight:600;overflow-wrap:anywhere}
+.person .amt{font-weight:700;white-space:nowrap}
+.person .sel{grid-column:2/4;display:flex;gap:8px;align-items:center}
+.person select{flex:1;min-width:0}
+.paid{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px}
+.paid input{flex:none;min-width:0;width:18px;height:18px;min-height:0;accent-color:var(--ok)}
+.person.done{background:var(--okbg);margin:0 -14px;padding:10px 14px}
+.tools{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.tools button{background:var(--bg);color:var(--text);border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+  <h1>🍽️ Food Money Collection</h1>
+
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><b id="sTotal">₹0</b><span>Total</span></div>
+      <div class="stat"><b id="sPaid" style="color:var(--ok)">₹0</b><span>Collected</span></div>
+      <div class="stat"><b id="sDue" style="color:var(--bad)">₹0</b><span>Pending</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Food menu</h2>
+    <div class="row">
+      <input id="fName" placeholder="Food name" maxlength="60">
+      <input id="fPrice" type="number" inputmode="decimal" min="0" step="0.5" placeholder="Price ₹" style="max-width:120px">
+      <button id="addFood">Add</button>
+    </div>
+    <ul class="menu" id="menu"></ul>
+  </div>
+
+  <div class="card">
+    <h2>People (<span id="count">0</span>)</h2>
+    <input id="search" placeholder="Search name…" style="width:100%">
+    <div class="row" style="margin-top:8px">
+      <input id="pName" placeholder="Add a new person" maxlength="60">
+      <button id="addPerson">Add</button>
+    </div>
+    <div id="people"></div>
+    <div class="tools">
+      <button id="copy">Copy pending list</button>
+      <button id="reset">Clear all food &amp; paid</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+  var KEY = "foodMoneyV1";
+  var NAMES = ["Gokul","Aardhra","Abhijith","Adhithya V Pillai","Rakendhu","Adithya Manoj","Agna","Akshara Vishnu","Akshaya Parameshwaran","Amruthendu","Anjana Hari","Anjana","Annmariaa","Anosh","Anusha","Aswin Joshy","Arunthathi","Arsh","Athira","Bettly","Bismitha","Devananda","Dhiya Ann","Diya Sathar","Drissya","Fabitha","Farheen","Fathima Fazleen","Fathima","Fiza","Goutham","Hasna","Lona","Janvy","Lakshmi","Greeshma","Lena","Meenakshi","Meera","Nahla","Namisha","Namitha","Nasmia","Nayana","Pravitha","Adithyan NJ","Ricky","Riya","Salma","Sayendhu","Shaun","Shibila","Sivani","Sreelakshmi","Thamannaahh","Yaswanth","Raychel","Nandana Sreenivasan","Mary","Akshaya A M","Ramzi","Abisha","Adhila","Adika","Amrita","Ajmila"];
+
+  var state = load();
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function fresh(){ return {menu:[], people:NAMES.map(function(n){return {id:uid(), name:n, food:"", paid:false};})}; }
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw){ var s = JSON.parse(raw); if(s && Array.isArray(s.menu) && Array.isArray(s.people)) return s; }
+    }catch(e){}
+    return fresh();
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+  function money(n){ return "₹" + (Math.round(n*100)/100).toLocaleString("en-IN"); }
+  function priceOf(foodId){
+    for(var i=0;i<state.menu.length;i++) if(state.menu[i].id===foodId) return state.menu[i].price;
+    return 0;
+  }
+  function $(id){ return document.getElementById(id); }
+
+  function renderMenu(){
+    var ul = $("menu");
+    if(!state.menu.length){ ul.innerHTML = '<li class="empty" style="border:0">No food added yet. Add items above.</li>'; return; }
+    ul.innerHTML = state.menu.map(function(f){
+      return '<li><span>'+esc(f.name)+' — <b>'+money(f.price)+'</b></span><button class="ghost" data-del="'+f.id+'">Delete</button></li>';
+    }).join("");
+  }
+
+  function renderPeople(){
+    var q = $("search").value.trim().toLowerCase();
+    var opts = '<option value="">— Select food —</option>' + state.menu.map(function(f){
+      return '<option value="'+f.id+'">'+esc(f.name)+' ('+money(f.price)+')</option>';
+    }).join("");
+    var html = "";
+    state.people.forEach(function(p,i){
+      if(q && p.name.toLowerCase().indexOf(q)===-1) return;
+      var amt = p.food ? priceOf(p.food) : 0;
+      html += '<div class="person'+(p.paid?' done':'')+'" data-id="'+p.id+'">'
+        + '<span class="n">'+(i+1)+'</span><span class="name">'+esc(p.name)+'</span>'
+        + '<span class="amt">'+(p.food?money(amt):"—")+'</span>'
+        + '<div class="sel"><select data-food="'+p.id+'">'+opts.replace('value="'+p.food+'"','value="'+p.food+'" selected')+'</select>'
+        + '<label class="paid"><input type="checkbox" data-paid="'+p.id+'"'+(p.paid?' checked':'')+(p.food?'':' disabled')+'> Paid</label></div>'
+        + '</div>';
+    });
+    $("people").innerHTML = html || '<div class="empty">No matching names.</div>';
+    $("count").textContent = state.people.length;
+  }
+
+  function renderStats(){
+    var total=0, paid=0;
+    state.people.forEach(function(p){
+      if(!p.food) return;
+      var a = priceOf(p.food); total += a; if(p.paid) paid += a;
+    });
+    $("sTotal").textContent = money(total);
+    $("sPaid").textContent = money(paid);
+    $("sDue").textContent = money(total-paid);
+  }
+
+  function renderAll(){ renderMenu(); renderPeople(); renderStats(); }
+  function findPerson(id){ return state.people.filter(function(p){return p.id===id;})[0]; }
+
+  $("addFood").addEventListener("click", function(){
+    var name = $("fName").value.trim(), price = parseFloat($("fPrice").value);
+    if(!name || !isFinite(price) || price < 0){ alert("Enter a food name and a valid price."); return; }
+    state.menu.push({id:uid(), name:name, price:price});
+    $("fName").value = ""; $("fPrice").value = "";
+    save(); renderAll();
+  });
+  $("fPrice").addEventListener("keydown", function(e){ if(e.key==="Enter") $("addFood").click(); });
+
+  $("menu").addEventListener("click", function(e){
+    var id = e.target.getAttribute("data-del"); if(!id) return;
+    if(!confirm("Delete this food? People who chose it will be unset.")) return;
+    state.menu = state.menu.filter(function(f){return f.id!==id;});
+    state.people.forEach(function(p){ if(p.food===id){ p.food=""; p.paid=false; } });
+    save(); renderAll();
+  });
+
+  $("people").addEventListener("change", function(e){
+    var t = e.target, p;
+    if(t.getAttribute("data-food")!==null){
+      p = findPerson(t.getAttribute("data-food")); if(!p) return;
+      p.food = t.value; if(!p.food) p.paid = false;
+    } else if(t.getAttribute("data-paid")!==null){
+      p = findPerson(t.getAttribute("data-paid")); if(!p) return;
+      p.paid = t.checked;
+    } else return;
+    save(); renderPeople(); renderStats();
+  });
+
+  $("search").addEventListener("input", renderPeople);
+
+  $("addPerson").addEventListener("click", function(){
+    var n = $("pName").value.trim(); if(!n) return;
+    state.people.push({id:uid(), name:n, food:"", paid:false});
+    $("pName").value = ""; save(); renderAll();
+  });
+  $("pName").addEventListener("keydown", function(e){ if(e.key==="Enter") $("addPerson").click(); });
+
+  $("reset").addEventListener("click", function(){
+    if(!confirm("Clear every food selection and paid mark?")) return;
+    state.people.forEach(function(p){ p.food=""; p.paid=false; });
+    save(); renderAll();
+  });
+
+  $("copy").addEventListener("click", function(){
+    var lines = [];
+    state.people.forEach(function(p){
+      if(p.food && !p.paid) lines.push(p.name+" - "+money(priceOf(p.food)));
+    });
+    var text = lines.length ? "Pending food money:\n"+lines.join("\n") : "Nothing pending.";
+    function done(){ alert("Copied!"); }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, function(){ prompt("Copy this:", text); });
+    } else { prompt("Copy this:", text); }
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
