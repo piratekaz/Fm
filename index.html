@@ -38,6 +38,7 @@ ul{list-style:none;margin:10px 0 0;padding:0}
 .paid{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:13px}
 .paid input{flex:none;min-width:0;width:18px;height:18px;min-height:0;accent-color:var(--ok)}
 .person.done{background:var(--okbg);margin:0 -14px;padding:10px 14px}
+.cp{background:var(--bg);color:var(--text);border:1px solid var(--line);padding:4px 10px;min-height:32px;font-size:13px;font-weight:600}
 .chips{grid-column:2/4;display:flex;flex-wrap:wrap;gap:6px}
 .chip{background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px;font-size:13px;display:inline-flex;gap:4px;align-items:center}
 .chip button{background:transparent;color:var(--bad);padding:0 6px;min-height:24px;font-size:16px;line-height:1}
@@ -77,6 +78,7 @@ ul{list-style:none;margin:10px 0 0;padding:0}
     </div>
     <div id="people"></div>
     <div class="tools">
+      <button id="copyAll">Copy all (name, foods, amount)</button>
       <button id="copy">Copy pending list</button>
       <button id="reset">Clear all food &amp; paid</button>
     </div>
@@ -160,7 +162,9 @@ ul{list-style:none;margin:10px 0 0;padding:0}
         + '<span class="amt">'+(has?money(personTotal(p)):"—")+'</span>'
         + (has ? '<div class="chips">'+chips+'</div>' : '')
         + '<div class="sel"><select data-food="'+p.id+'">'+opts+'</select>'
-        + '<label class="paid"><input type="checkbox" data-paid="'+p.id+'"'+(p.paid?' checked':'')+(has?'':' disabled')+'> Paid</label></div>'
+        + '<label class="paid"><input type="checkbox" data-paid="'+p.id+'"'+(p.paid?' checked':'')+(has?'':' disabled')+'> Paid</label>'
+        + (has ? '<button class="cp" data-cp="'+p.id+'">Copy</button>' : '')
+        + '</div>'
         + '</div>';
     });
     $("people").innerHTML = html || '<div class="empty">No matching names.</div>';
@@ -238,19 +242,45 @@ ul{list-style:none;margin:10px 0 0;padding:0}
     refresh();
   });
 
-  $("copy").addEventListener("click", function(){
-    var lines = [];
-    state.people.forEach(function(p){
-      if(p.foods.length && !p.paid){
-        var names = p.foods.map(function(id){ var f=foodById(id); return f?f.name:""; }).filter(Boolean).join(", ");
-        lines.push(p.name+" ("+names+") - "+money(personTotal(p)));
-      }
-    });
-    var text = lines.length ? "Pending food money:\n"+lines.join("\n") : "Nothing pending.";
+  function foodNames(p){
+    return p.foods.map(function(id){ var f=foodById(id); return f?f.name:""; }).filter(Boolean).join(", ");
+  }
+  function personText(p){
+    return p.name + "\nFood: " + foodNames(p) + "\nAmount: " + money(personTotal(p)) + (p.paid ? " (Paid)" : "");
+  }
+  function copyText(text){
     function done(){ alert("Copied!"); }
+    function fallback(){
+      try{
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if(ok){ done(); return; }
+      }catch(e){}
+      prompt("Copy this:", text);
+    }
     if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(text).then(done, function(){ prompt("Copy this:", text); });
-    } else { prompt("Copy this:", text); }
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+  }
+
+  $("people").addEventListener("click", function(e){
+    var id = e.target.getAttribute("data-cp"); if(!id) return;
+    var p = findPerson(id); if(p) copyText(personText(p));
+  });
+
+  $("copyAll").addEventListener("click", function(){
+    var list = state.people.filter(function(p){return p.foods.length;});
+    if(!list.length){ alert("No food selected yet."); return; }
+    var total = list.reduce(function(s,p){return s+personTotal(p);},0);
+    copyText(list.map(personText).join("\n\n") + "\n\nTotal: " + money(total));
+  });
+
+  $("copy").addEventListener("click", function(){
+    var list = state.people.filter(function(p){return p.foods.length && !p.paid;});
+    copyText(list.length ? "Pending food money:\n\n" + list.map(personText).join("\n\n") : "Nothing pending.");
   });
 
   renderAll();
